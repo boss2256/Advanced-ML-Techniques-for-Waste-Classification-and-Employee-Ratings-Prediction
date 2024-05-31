@@ -1,0 +1,255 @@
+---
+title: "Machine Learning for Business Intelligence"
+author: "Nas"
+date: "2024-05-26"
+output: pdf_document
+---
+
+# Step 1: Load the Data and Libraries
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Load necessary libraries
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(e1071)
+library(glmnet)
+
+# Load the dataset
+data <- read_excel("Data.xls")
+
+# Explore the dataset
+str(data)
+summary(data)
+head(data)
+
+```
+## Explanation:
+We begin by loading the required libraries for data manipulation and modeling.
+We read the Excel file containing the dataset into R and display the first few rows to understand its structure.
+
+# Step 2: Data Preprocessing
+```{r}
+# Convert categorical variables to factors
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Ensure all categorical variables are factors
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Remove duplicate rows
+data <- data %>% distinct()
+
+# Check for missing values
+missing_values <- colSums(is.na(data))
+missing_values
+
+# Impute missing values with median for numeric variables and mode for categorical variables
+data <- data %>%
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.), median(., na.rm = TRUE), .))) %>%
+  mutate(across(where(is.factor), ~ ifelse(is.na(.), as.factor(names(sort(table(.), decreasing = TRUE))[1]), .)))
+
+```
+```{r}
+# Convert categorical variables to factors
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Check for missing values
+missing_values <- colSums(is.na(data))
+print(missing_values)
+
+# Impute missing values
+data <- data %>%
+  mutate(
+    ratingCeo = ifelse(is.na(ratingCeo), median(ratingCeo, na.rm = TRUE), ratingCeo),
+    ratingBusinessOutlook = ifelse(is.na(ratingBusinessOutlook), median(ratingBusinessOutlook, na.rm = TRUE), ratingBusinessOutlook),
+    ratingRecommendToFriend = ifelse(is.na(ratingRecommendToFriend), median(ratingRecommendToFriend, na.rm = TRUE), ratingRecommendToFriend),
+    isCurrentJob = ifelse(is.na(isCurrentJob), as.factor(names(sort(table(isCurrentJob), decreasing = TRUE))[1]), isCurrentJob),
+    employmentStatus = ifelse(is.na(employmentStatus), as.factor(names(sort(table(employmentStatus), decreasing = TRUE))[1]), employmentStatus),
+    jobEndingYear = ifelse(is.na(jobEndingYear), median(jobEndingYear, na.rm = TRUE), jobEndingYear),
+    jobTitle.text = ifelse(is.na(jobTitle.text), as.factor(names(sort(table(jobTitle.text), decreasing = TRUE))[1]), jobTitle.text),
+    location.name = ifelse(is.na(location.name), as.factor(names(sort(table(location.name), decreasing = TRUE))[1]), location.name)
+  )
+
+```
+## Explanation:
+Converting categorical variables to factors: Ensures that categorical data is properly recognized as such.
+Checking for missing values: Identifies columns with missing data.
+Imputing missing values:
+For numeric variables like ratingCeo, ratingBusinessOutlook, ratingRecommendToFriend, and jobEndingYear, missing values are replaced with the median of each respective column.
+For categorical variables like isCurrentJob, employmentStatus, jobTitle.text, and location.name, missing values are replaced with the mode (most frequent value) of each respective column.
+
+# Step 3: Feature Engineering
+```{r}
+# Create new features if necessary
+data <- data %>%
+  mutate(ratingWorkLifeBalance_bin = ifelse(ratingWorkLifeBalance >= 3, "Good", "Bad"),
+         ratingCultureAndValues_bin = ifelse(ratingCultureAndValues >= 3, "Good", "Bad"))
+
+# Convert new features to factors
+data <- data %>%
+  mutate(across(ends_with("_bin"), as.factor))
+
+```
+## Explanation:
+Creating new features: For instance, binning ratings into "Good" and "Bad" categories based on a threshold to simplify the modeling process.
+Converting new features to factors: Ensures that the new categorical features are recognized as factors.
+
+# Step 4: Splitting the Data
+```{r}
+set.seed(123)  # For reproducibility
+trainIndex <- createDataPartition(data$ratingOverall, p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+dataTrain <- data[ trainIndex,]
+dataTest  <- data[-trainIndex,]
+```
+## Explanation:
+Setting a seed: Ensures reproducibility of the data split.
+Creating training and testing sets: Splits the dataset into training (80%) and testing (20%) sets using stratified sampling based on the target variable to maintain class distribution.
+
+# Step 5: Model Training
+
+## Random Forest Model
+```{r}
+# Convert ratingOverall to a factor
+dataTrain$ratingOverall <- as.factor(dataTrain$ratingOverall)
+dataTest$ratingOverall <- as.factor(dataTest$ratingOverall)
+
+# Train a random forest model
+rf_model <- randomForest(ratingOverall ~ ., data = dataTrain, importance = TRUE)
+print(rf_model)
+
+# Predict on test data
+rf_predictions <- predict(rf_model, dataTest)
+
+# Ensure predictions are treated as factors
+rf_predictions <- as.factor(rf_predictions)
+
+# Evaluate model performance
+rf_confusion <- confusionMatrix(rf_predictions, dataTest$ratingOverall)
+print(rf_confusion)
+```
+### Explanation:
+Training a random forest model: Fits a random forest model to the training data.
+Predicting on test data: Uses the trained model to predict outcomes on the test set.
+Evaluating model performance: Generates a confusion matrix to evaluate accuracy and other performance metrics.
+
+The random forest model was successfully trained using the randomForest package in R, treating the ratingOverall variable as a factor for classification. The model achieved an accuracy of 72.06%, with class-specific sensitivities ranging from 49.79% to 76.87% and specificities from 82.05% to 99.21%. The confusion matrix indicated a balanced performance across all classes. This suggests that the model is effective at predicting employee overall ratings based on the available features, with the out-of-bag (OOB) error rate estimated at 28.02%.
+
+## Support Vector Machine Model
+```{r}
+# Train a support vector machine model
+svm_model <- svm(ratingOverall ~ ., data = dataTrain)
+print(svm_model)
+
+# Predict on test data
+svm_predictions <- predict(svm_model, dataTest)
+
+# Evaluate model performance
+svm_confusion <- confusionMatrix(svm_predictions, dataTest$ratingOverall)
+print(svm_confusion)
+
+```
+### Explanation:
+Training a SVM model: Fits a support vector machine model to the training data.
+Predicting on test data: Uses the trained model to predict outcomes on the test set.
+Evaluating model performance: Generates a confusion matrix to evaluate accuracy and other performance metrics.
+
+The support vector machine (SVM) model was trained using the svm function from the e1071 package in R. The model achieved an accuracy of 54.66%, with a notable imbalance in class-specific sensitivities, ranging from 29.60% to 100%, and specificities consistently at 100% for most classes except class 4. The confusion matrix indicated that the model struggled particularly with distinguishing between classes, especially class 4, where a high number of instances were misclassified. The overall performance metrics suggest that while the model can classify some classes well, it has significant room for improvement in handling others.
+
+## Gradient Boosting Machine (GBM) Model Training and Evaluation
+```{r}
+library(gbm)
+library(caret)
+
+# Remove duplicate rows
+data <- data %>% distinct()
+
+# Ensure all categorical variables are factors
+data <- data %>%
+  mutate(across(where(is.character), as.factor))
+
+# Convert ratingOverall to a factor
+dataTrain$ratingOverall <- as.factor(dataTrain$ratingOverall)
+dataTest$ratingOverall <- as.factor(dataTest$ratingOverall)
+
+# Train a GBM model
+gbm_model <- gbm(ratingOverall ~ ., data = dataTrain, distribution = "multinomial", n.trees = 100, interaction.depth = 3, shrinkage = 0.01, cv.folds = 5)
+summary(gbm_model)
+
+# Predict on test data
+gbm_predictions <- predict(gbm_model, dataTest, n.trees = gbm_model$n.trees, type = "response")
+gbm_predictions <- apply(gbm_predictions, 1, which.max)
+gbm_predictions <- factor(gbm_predictions, levels = levels(dataTrain$ratingOverall))
+
+# Evaluate model performance
+gbm_confusion <- confusionMatrix(gbm_predictions, dataTest$ratingOverall)
+print(gbm_confusion)
+
+```
+### Explanation:
+The Gradient Boosting Machine (GBM) model was trained to predict the ratingOverall variable, with the dataset preprocessed to remove duplicate rows and ensure all categorical variables were encoded as factors. The GBM model used a multinomial distribution with 100 trees, an interaction depth of 3, and a shrinkage rate of 0.01, and it was cross-validated with 5 folds. Predictions on the test data were made using the model, and the predicted class with the highest probability was selected for each instance. The model's performance was evaluated using a confusion matrix, providing metrics like accuracy, sensitivity, and specificity for each class.
+
+# Step 6: Hyperparameter Tuning
+## Hyperparameter Tuning for Random Forest
+```{r}
+# Define the parameter grid
+rf_grid <- expand.grid(mtry = c(2, 4, 6, 8))
+
+# Train with cross-validation
+rf_tuned <- train(ratingOverall ~ ., data = dataTrain, method = "rf",
+                  trControl = trainControl(method = "cv", number = 5),
+                  tuneGrid = rf_grid)
+
+print(rf_tuned)
+
+```
+### Explanation:
+Defining the parameter grid: Specifies the range of hyperparameters to explore.
+Training with cross-validation: Performs cross-validation to select the best hyperparameters.
+
+# Step 7: Model Evaluation
+```{r}
+# Evaluate tuned model on test data
+tuned_rf_predictions <- predict(rf_tuned, dataTest)
+tuned_rf_confusion <- confusionMatrix(tuned_rf_predictions, dataTest$ratingOverall)
+print(tuned_rf_confusion)
+```
+## Explanation:
+Evaluating the tuned model: Predicts and evaluates the performance of the hyperparameter-tuned random forest model on the test data.
+
+# Step 8: Calculate and Compare Model Accuracies
+
+```{r}
+# Calculate accuracy for Random Forest
+rf_accuracy <- rf_confusion$overall['Accuracy']
+
+# Calculate accuracy for SVM
+svm_accuracy <- svm_confusion$overall['Accuracy']
+
+# Calculate accuracy for GBM
+gbm_accuracy <- gbm_confusion$overall['Accuracy']
+
+# Create a data frame with accuracy values
+accuracy_values <- data.frame(
+  Model = c("Random Forest", "SVM", "GBM"),
+  Accuracy = c(rf_accuracy, svm_accuracy, gbm_accuracy)
+)
+
+# Plot the accuracies
+library(ggplot2)
+ggplot(data = accuracy_values, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  ylim(0, 1) +
+  xlab("Model") +
+  ylab("Accuracy") +
+  ggtitle("Comparison of Model Accuracies") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
